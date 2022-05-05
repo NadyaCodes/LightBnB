@@ -139,22 +139,71 @@ exports.getAllReservations = getAllReservations;
  */
 const getAllProperties = function(options, limit = 10) {
 
+  const queryParams = [];
+  let queryString = `
+  SELECT properties.*, Avg(property_reviews.rating) as average_rating
+    FROM properties
+    JOIN property_reviews ON property_id = properties.id 
+  `;
+
+  if (options.owner_id) {
+    queryParams.push(options.owner_id);
+    queryString += `WHERE owner_id = $${queryParams.length} `;
+  }
+
+  if (options.city) {
+    queryParams.push(`%${options.city}%`);
+    queryString += `WHERE city LIKE $${queryParams.length} `;
+  }
+
+
+  if (options.minimum_price_per_night) {
+    if (options.city) {
+      queryParams.push(`${options.minimum_price_per_night * 100}`)
+      queryString += `AND properties.cost_per_night >= $${queryParams.length} `
+    } else {
+      queryParams.push(`${options.minimum_price_per_night * 100}`)
+      queryString += `WHERE properties.cost_per_night >= $${queryParams.length} `
+    }
+
+  }
+
+  if (options.maximum_price_per_night) {
+    if (options.city || options.minimum_price_per_night) {
+      queryParams.push(`${options.maximum_price_per_night * 100}`)
+      queryString += `AND properties.cost_per_night <= $${queryParams.length} `
+    } else {
+      queryParams.push(`${options.maximum_price_per_night * 100}`)
+      queryString += `WHERE properties.cost_per_night <= $${queryParams.length} `
+    }
+
+  }
+
+  queryString +=
+  `GROUP BY properties.id `
+
+  if (options.minimum_rating) {
+    queryParams.push(`${options.minimum_rating}`)
+    queryString +=  `HAVING Avg(property_reviews.rating) >= $${queryParams.length} `
+  }
+  queryParams.push(limit)
+
+  queryString += `
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length};`
+  
+  console.log(queryString, queryParams)
 
   return pool
-    .query(`SELECT * FROM properties LIMIT $1`, [limit])
-    .then((result) => {
-      console.log(result.rows);
-      return result.rows;
-    })
-    .catch((err) => {
-      console.log(err.message);
-    });
+  .query(queryString, queryParams)
+  .then((result) => {
+    console.log("result", result.rows);
+    return result.rows;
+  })
+  .catch((err) => {
+    console.log(err.message);
+  });
 
-  // const limitedProperties = {};
-  // for (let i = 1; i <= limit; i++) {
-  //   limitedProperties[i] = properties[i];
-  // }
-  // return Promise.resolve(limitedProperties);
 }
 exports.getAllProperties = getAllProperties;
 
